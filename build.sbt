@@ -5,18 +5,17 @@ organization := "com.spotify.data"
 name := "gcs-tools"
 
 val avroVersion = "1.12.0"
-val gcsConnectorVersion = "3.0.1"
-val guavaVersion = "33.4.0-jre" // otherwise android is taken
-val hadoopVersion = "3.3.6"
-val jacksonVersion = "2.18.2"
+val gcsConnectorVersion = "3.1.17"
+val guavaVersion = "33.4.8-jre" // otherwise android is taken
+val hadoopVersion = "3.4.3"
+val jacksonVersion = "2.19.0"
 val joptVersion = "5.0.4"
-val magnolifyVersion = "0.7.4"
-val parquetVersion = "1.15.2"
+val magnolifyVersion = "0.8.0"
+val parquetVersion = "1.17.1"
 val protobufGenericVersion = "0.2.9"
-val protobufVersion = "4.29.3"
+val protobufVersion = "4.35.0"
 val scalatestVersion = "3.2.19"
-val slf4jReload4jVersion2 = "2.0.16"
-val slf4jReload4jVersion1 = "1.7.36" // scala-steward:off
+val slf4jReload4jVersion2 = "2.0.17"
 
 // use slf4j-reload4j instead
 lazy val excludeLog4j = ExclusionRule("log4j", "log4j")
@@ -36,7 +35,7 @@ lazy val protobufSettings = Seq(Compile, Test)
 
 val commonSettings = Seq(
   scalaVersion := "2.13.16",
-  javacOptions ++= Seq("--release", "8"),
+  javacOptions ++= Seq("--release", "11"),
   fork := true,
   Test / outputStrategy := Some(OutputStrategy.StdoutOutput)
 )
@@ -113,7 +112,7 @@ lazy val `parquet-cli` = project
     assembly / assemblyJarName := s"parquet-cli-$parquetVersion.jar",
     libraryDependencies ++= Seq(
       "org.apache.parquet" % "parquet-cli" % parquetVersion,
-      "org.slf4j" % "slf4j-reload4j" % slf4jReload4jVersion1 % Runtime,
+      "org.slf4j" % "slf4j-reload4j" % slf4jReload4jVersion2 % Runtime,
       "org.scalatest" %% "scalatest" % scalatestVersion % Test
     )
   )
@@ -233,21 +232,37 @@ lazy val assemblySettings = Seq(
       MergeStrategy.preferProject
     case x if x.endsWith(".properties") =>
       MergeStrategy.filterDistinctLines
+    case PathList("META-INF", "services", "java.net.spi.InetAddressResolverProvider") =>
+      // dnsjava provides this via multi-release jar (META-INF/versions/18/);
+      // assembly doesn't preserve MRJAR structure so the class is missing at runtime
+      MergeStrategy.discard
     case PathList("META-INF", "services", _*) =>
       MergeStrategy.filterDistinctLines
     case PathList("META-INF", "NOTICE") =>
       // avro-tools META-INF/NOTICE must not be renamed
       CustomMergeStrategy.rename(preserveName("avro-tools"))
-    case PathList("META-INF", "NOTICE.txt" | "FastDoubleParser-NOTICE") =>
+    case PathList("META-INF", "NOTICE.txt" | "NOTICE.markdown" | "FastDoubleParser-NOTICE" | "FastDoubleParser-LICENSE") =>
       MergeStrategy.rename
     case PathList("NOTICE") =>
       MergeStrategy.rename
-    case PathList("META-INF", "maven" | "versions", _*) =>
+    case PathList("META-INF", "maven" | "versions" | "proguard", _*) =>
       MergeStrategy.discard
     case PathList("META-INF", x) if discardMeta(x) =>
       MergeStrategy.discard
     case PathList("module-info.class" | "LICENSE") =>
       MergeStrategy.discard
+    case PathList("javax", "servlet", _*) =>
+      CustomMergeStrategy("servlet")(exclude("javax.servlet-api", "avro-tools"))
+    case PathList("javax", "annotation", _*) =>
+      CustomMergeStrategy("annotation")(exclude("javax.annotation-api", "avro-tools"))
+    case PathList("org", "aopalliance", _*) =>
+      CustomMergeStrategy("aopalliance")(exclude("aopalliance-repackaged"))
+    case PathList("org", "apache", "hadoop", "yarn", _*) =>
+      CustomMergeStrategy("yarn")(exclude("hadoop-yarn-common", "avro-tools"))
+    case PathList("org", "apache", "hadoop", "security", "authentication", _*) =>
+      CustomMergeStrategy("hadoop-auth")(exclude("hadoop-auth", "avro-tools"))
+    case PathList("org", "jspecify", _*) =>
+      CustomMergeStrategy("jspecify")(exclude("hadoop-shaded-guava"))
     case x =>
       // avro-tools is a fat jar
       // in case of conflict prefer library from other source
